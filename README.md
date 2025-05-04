@@ -1,4 +1,4 @@
-#Task Performence Quality Analysis Project
+Task Performence Quality Analysis Project
 As a Data Analyst, the task is to analyze and derive insights from a dataset containing various
 features related to tasks, samples, defects, errors, and employee information within a company.
 The dataset includes the following features:
