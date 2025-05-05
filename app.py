@@ -372,124 +372,479 @@ def analyze_correlations(df):
     }
 
 def generate_visualizations(df):
-    """Generate Plotly visualizations"""
+    """Generate simplified Plotly visualizations with clean layout and improved readability"""
+    import numpy as np
+    import plotly.graph_objects as go
+    import plotly.express as px
+    from plotly.subplots import make_subplots
+    from scipy import stats
+    import statsmodels.api as sm
+    import json
+    
+    # Simplified color palette with fewer colors
+    COLORS = {
+        'primary': '#4285F4',    # Google Blue
+        'secondary': '#34A853',  # Google Green  
+        'accent': '#EA4335',     # Google Red
+        'dark': '#202124',       # Dark gray for text
+        'light': '#E8EAED'       # Light gray for backgrounds
+    }
+    
+    # Simplified chart layout with minimalist approach
+    def get_base_layout(title, height=None, width=None):
+        layout = {
+            'template': 'plotly_white',
+            'margin': dict(l=30, r=30, t=50, b=30),  # Reduced margins
+            'font': dict(family='Arial, sans-serif', color=COLORS['dark'], size=10),
+            'title': dict(
+                text=title,
+                font=dict(size=14, color=COLORS['dark']),
+                x=0.5,
+                xanchor='center',
+                y=0.95
+            ),
+            'legend': dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5,
+                font=dict(size=9),
+                bgcolor='rgba(255,255,255,0.8)',
+            ),
+            'plot_bgcolor': 'white',
+            'paper_bgcolor': 'white',
+            'width': width if width else 550,  # Slightly reduced width
+            'xaxis': dict(
+                automargin=True,
+                showgrid=False,  # Remove gridlines for cleaner look
+                linecolor='lightgray',
+                linewidth=1
+            ),
+            'yaxis': dict(
+                automargin=True,
+                showgrid=True,    # Keep y-grid for reference but make it lighter
+                gridcolor='rgba(0,0,0,0.05)',
+                linecolor='lightgray',
+                linewidth=1
+            ),
+        }
+        
+        if height:
+            layout['height'] = height
+            
+        return layout
+    
+    # Simplified annotations (fewer stats, cleaner presentation)
+    def create_stat_annotation(text, x=0.5, y=0.02):
+        return dict(
+            x=x, y=y,
+            xref="paper", yref="paper",
+            text=text,
+            showarrow=False,
+            font=dict(size=10),
+            bgcolor="rgba(255,255,255,0.85)",
+            borderwidth=0,  # Remove border
+            borderpad=4,
+            align="center",
+            xanchor="center"
+        )
+    
     visualizations = []
     
-    # Numerical distributions
+    # Identify numeric and categorical columns
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    cat_cols = df.select_dtypes(include=['string', 'category', 'object']).columns.tolist()
+    
+    # 1. NUMERICAL DISTRIBUTIONS - SIMPLIFIED
     if numeric_cols:
-        for col in numeric_cols[:5]:
-            fig = make_subplots(rows=1, cols=1)
+        for i, col in enumerate(numeric_cols[:3]):
+            size_config = "small" if i == 0 else "xsmall"
+            
+            # Create simple histogram instead of combined chart
+            fig = go.Figure()
+            
             hist_data = df[col].dropna()
+            hist_data = hist_data.to_numpy().tolist()
             
-            fig.add_trace(
-                go.Histogram(
-                    x=hist_data,
-                    name='Histogram',
-                    marker_color=BLUE_PALETTE['primary'],
-                    opacity=0.7,
-                    nbinsx=30,
-                    histnorm='probability density'
+            if len(hist_data) > 0:
+                # Add simplified histogram
+                fig.add_trace(
+                    go.Histogram(
+                        x=hist_data,
+                        marker_color=COLORS['primary'],
+                        opacity=0.7,
+                        nbinsx=min(20, len(set(hist_data)) // 2 + 1),  # Fewer bins
+                    )
                 )
-            )
-            
-            from scipy import stats
-            if len(hist_data) > 1:
-                kde_x = np.linspace(min(hist_data), max(hist_data), 100)
-                kde = stats.gaussian_kde(hist_data)
-                kde_y = kde(kde_x)
+                
+                # Add KDE curve if we have enough data
+                if len(hist_data) > 5:
+                    try:
+                        kde_x = np.linspace(min(hist_data), max(hist_data), 100).tolist()
+                        kde = stats.gaussian_kde(hist_data)
+                        kde_y = kde(kde_x).tolist()
+                        
+                        # Scale the KDE to match histogram height
+                        hist_max = max(np.histogram(hist_data, bins=20)[0])
+                        scale_factor = hist_max / max(kde_y)
+                        
+                        fig.add_trace(
+                            go.Scatter(
+                                x=kde_x,
+                                y=[y * scale_factor for y in kde_y],
+                                mode='lines',
+                                line=dict(color=COLORS['accent'], width=2),
+                                name='Density'
+                            )
+                        )
+                    except:
+                        pass
+                
+                # Calculate minimal statistics
+                hist_numpy = np.array(hist_data)
+                mean_val = np.mean(hist_numpy)
+                median_val = np.median(hist_numpy)
+                
+                # Add vertical lines for mean and median
+                fig.add_shape(
+                    type="line",
+                    x0=mean_val, x1=mean_val,
+                    y0=0, y1=1,
+                    yref="paper",
+                    line=dict(color=COLORS['secondary'], width=2, dash="solid"),
+                    name="Mean"
+                )
+                
+                fig.add_shape(
+                    type="line",
+                    x0=median_val, x1=median_val,
+                    y0=0, y1=1,
+                    yref="paper",
+                    line=dict(color=COLORS['accent'], width=2, dash="dash"),
+                    name="Median"
+                )
+                
+                # Add legend for mean and median lines
+                fig.add_trace(
+                    go.Scatter(
+                        x=[None], y=[None],
+                        mode="lines",
+                        line=dict(color=COLORS['secondary'], width=2),
+                        name=f"Mean: {mean_val:.2f}"
+                    )
+                )
                 
                 fig.add_trace(
                     go.Scatter(
-                        x=kde_x,
-                        y=kde_y,
-                        mode='lines',
-                        name='Density',
-                        line=dict(color=BLUE_PALETTE['dark'], width=2)
+                        x=[None], y=[None],
+                        mode="lines",
+                        line=dict(color=COLORS['accent'], width=2, dash="dash"),
+                        name=f"Median: {median_val:.2f}"
                     )
                 )
-            
-            fig.update_layout(
-                title=f'Distribution of {col}',
-                height=350,
-                width=500,
-                template='plotly_white',
-                margin=dict(l=40, r=40, t=50, b=40)
-            )
-            
-            visualizations.append({
-                'title': f'Distribution of {col}',
-                'type': 'histogram',
-                'plotly_figure': fig.to_json()
-            })
-    
-    # Categorical value counts
-    cat_cols = df.select_dtypes(include=['string', 'category']).columns.tolist()
-    if cat_cols:
-        for col in cat_cols[:3]:
-            if df[col].nunique() < 15:
-                value_counts = df[col].value_counts().head(10)
                 
-                fig = go.Figure(data=go.Bar(
-                    x=value_counts.index,
-                    y=value_counts.values,
-                    marker_color=BLUE_PALETTE['secondary']
-                ))
+                # Set appropriate size
+                height = 350 if size_config == "small" else 300
+                width = 550 if size_config == "small" else 450
                 
+                # Update layout with simplified settings
+                base_layout = get_base_layout(f'Distribution of {col}', height=height, width=width)
+                fig.update_layout(**base_layout)
                 fig.update_layout(
-                    title=f'Top values in {col}',
-                    height=350,
-                    width=500,
-                    template='plotly_white',
-                    xaxis_tickangle=-45,
-                    margin=dict(l=40, r=40, t=50, b=70)
+                    bargap=0.05,  # Tighter bars
+                    showlegend=True,
+                    xaxis_title=col,
+                    yaxis_title="Count"
                 )
                 
-                visualizations.append({
-                    'title': f'Value Counts for {col}',
-                    'type': 'bar',
-                    'plotly_figure': fig.to_json()
-                })
+                try:
+                    fig_json = json.dumps(fig.to_dict())
+                    visualizations.append({
+                        'title': f'Distribution of {col}',
+                        'type': 'histogram',
+                        'size': size_config,
+                        'plotly_figure': fig_json
+                    })
+                except (TypeError, ValueError) as e:
+                    visualizations.append({
+                        'title': f'Distribution of {col}',
+                        'type': 'histogram',
+                        'size': size_config,
+                        'error': f"Could not serialize plot: {str(e)}"
+                    })
     
-    # Scatter plot for top correlated features
+    # 2. CATEGORICAL VISUALIZATIONS - SIMPLIFIED
+    if cat_cols:
+        for i, col in enumerate(cat_cols[:3]):
+            size_config = "small" if i == 0 else "xsmall"
+            card_height = 350 if size_config == "small" else 300
+            
+            if df[col].nunique() <= 10:  # Reduced from 15 to 10 for simplicity
+                value_counts = df[col].value_counts().reset_index()
+                value_counts.columns = [col, 'Count']
+                value_counts = value_counts.sort_values('Count', ascending=False).head(8)  # Limit to top 8
+                
+                # Convert to Python native types
+                x_values = value_counts[col].astype(str).tolist()
+                y_values = value_counts['Count'].tolist()
+                
+                # Create a horizontal bar chart
+                fig = go.Figure()
+                
+                # Add bars with simpler style
+                fig.add_trace(go.Bar(
+                    y=x_values[::-1],  # Reverse for highest at top
+                    x=y_values[::-1],
+                    orientation='h',
+                    marker_color=COLORS['primary'],
+                    textposition='outside',
+                    name='Count'
+                ))
+                
+                width = 550 if size_config == "small" else 450
+                base_layout = get_base_layout(f'Distribution of {col}', height=card_height, width=width)
+                base_layout.update(
+                    xaxis_title='Count',
+                    yaxis_title=None,
+                    showlegend=False,
+                    margin=dict(l=120, r=30, t=50, b=30)  # Adjusted left margin for labels
+                )
+                fig.update_layout(**base_layout)
+                
+                try:
+                    fig_json = json.dumps(fig.to_dict())
+                    visualizations.append({
+                        'title': f'Distribution of {col}',
+                        'type': 'horizontal_bar',
+                        'size': size_config,
+                        'plotly_figure': fig_json
+                    })
+                except (TypeError, ValueError) as e:
+                    visualizations.append({
+                        'title': f'Distribution of {col}',
+                        'type': 'horizontal_bar',
+                        'size': size_config,
+                        'error': f"Could not serialize plot: {str(e)}"
+                    })
+            else:
+                # For high cardinality, show top categories
+                top_n = 5  # Reduced from 6 to 5
+                value_counts = df[col].value_counts()
+                top_values = value_counts.head(top_n)
+                
+                # Group the rest as "Others"
+                others_sum = value_counts.iloc[top_n:].sum()
+                
+                # Combine top values with "Others"
+                labels = [str(x) for x in list(top_values.index)] + ['Others']
+                values = list(top_values.values) + [others_sum]
+                values = [float(v) for v in values]
+                
+                # Create simple pie chart
+                fig = go.Figure(data=[go.Pie(
+                    labels=labels,
+                    values=values,
+                    hole=0.4,  # Donut chart for modern look
+                    marker_colors=px.colors.qualitative.Pastel,  # Pastel colors are less cluttered
+                    textinfo='percent',
+                    insidetextorientation='radial',
+                    sort=False
+                )])
+                
+                width = 550 if size_config == "small" else 450
+                base_layout = get_base_layout(
+                    f'Top {top_n} Values in {col}',
+                    height=card_height,
+                    width=width
+                )
+                fig.update_layout(**base_layout)
+                
+                try:
+                    fig_json = json.dumps(fig.to_dict())
+                    visualizations.append({
+                        'title': f'Top Values in {col}',
+                        'type': 'pie',
+                        'size': size_config,
+                        'plotly_figure': fig_json
+                    })
+                except (TypeError, ValueError) as e:
+                    visualizations.append({
+                        'title': f'Top Values in {col}',
+                        'type': 'pie',
+                        'size': size_config,
+                        'error': f"Could not serialize plot: {str(e)}"
+                    })
+    
+    # 3. CORRELATION ANALYSIS - SIMPLIFIED
     numeric_df = df.select_dtypes(include=[np.number])
     if len(numeric_df.columns) >= 2:
+        size_config = "medium"
+        
+        # Find highest correlation pair
         corr_matrix = numeric_df.corr().abs()
         np.fill_diagonal(corr_matrix.values, 0)
         
         max_corr_idx = np.argmax(corr_matrix.values)
         i, j = np.unravel_index(max_corr_idx, corr_matrix.shape)
         col1, col2 = corr_matrix.columns[i], corr_matrix.columns[j]
+        actual_corr = numeric_df[[col1, col2]].corr().iloc[0,1]
         
-        fig = px.scatter(
-            df, 
-            x=col1, 
-            y=col2, 
-            color_discrete_sequence=[BLUE_PALETTE['accent']],
-            opacity=0.7,
-            title=f'Scatter Plot: {col1} vs {col2}'
-        )
+        # Create scatter plot with regression line
+        x_data = df[col1].dropna().tolist()
+        y_data = df[col2].dropna().tolist()
         
-        fig.update_layout(
-            height=350,
-            width=500,
-            template='plotly_white',
-            margin=dict(l=40, r=40, t=50, b=40)
-        )
+        if len(x_data) > 3 and len(y_data) > 3:
+            fig = go.Figure()
+            
+            try:
+                # Convert to numpy arrays for regression
+                x_array = np.array(x_data)
+                y_array = np.array(y_data)
+                
+                # Create matching arrays
+                mask = ~np.isnan(x_array) & ~np.isnan(y_array)
+                x_clean = x_array[mask]
+                y_clean = y_array[mask]
+                
+                if len(x_clean) > 3:
+                    # Add scatter plot with simple styling
+                    fig.add_trace(
+                        go.Scatter(
+                            x=x_clean.tolist(),
+                            y=y_clean.tolist(),
+                            mode='markers',
+                            marker=dict(
+                                color=COLORS['primary'],
+                                opacity=0.6,
+                                size=6,
+                            ),
+                            name='Data Points'
+                        )
+                    )
+                    
+                    # Add regression line
+                    X = sm.add_constant(x_clean)
+                    model = sm.OLS(y_clean, X).fit()
+                    slope = model.params[1]
+                    intercept = model.params[0]
+                    
+                    # Generate points for regression line
+                    x_line = np.linspace(min(x_clean), max(x_clean), 100)
+                    y_line = intercept + slope * x_line
+                    
+                    # Add trend line
+                    fig.add_trace(
+                        go.Scatter(
+                            x=x_line.tolist(),
+                            y=y_line.tolist(),
+                            mode='lines',
+                            name=f'r = {actual_corr:.2f}',
+                            line=dict(color=COLORS['accent'], width=2)
+                        )
+                    )
+                    
+                    base_layout = get_base_layout(
+                        f'{col1} vs {col2}',
+                        height=400,
+                        width=550
+                    )
+                    base_layout.update(
+                        xaxis_title=dict(text=col1, font=dict(size=11)),
+                        yaxis_title=dict(text=col2, font=dict(size=11))
+                    )
+                    fig.update_layout(**base_layout)
+                    
+                    try:
+                        fig_json = json.dumps(fig.to_dict())
+                        visualizations.append({
+                            'title': f'{col1} vs {col2}',
+                            'type': 'scatter_regression',
+                            'size': size_config,
+                            'plotly_figure': fig_json
+                        })
+                    except (TypeError, ValueError) as e:
+                        visualizations.append({
+                            'title': f'{col1} vs {col2}',
+                            'type': 'scatter_regression',
+                            'size': size_config,
+                            'error': f"Could not serialize plot: {str(e)}"
+                        })
+            except Exception as e:
+                visualizations.append({
+                    'title': f'{col1} vs {col2}',
+                    'type': 'scatter_regression',
+                    'size': size_config,
+                    'error': f"Error creating plot: {str(e)}"
+                })
+    
+    
+    # 4. DATA COMPLETENESS - SIMPLIFIED
+    size_config = "small"
+    
+    try:
+        # Calculate missing values percentage
+        missing_data = df.isnull().sum().sort_values(ascending=False)
+        missing_percent = (missing_data / len(df) * 100).round(1)
         
+        # Filter to include only columns with missing values
+        missing_percent = missing_percent[missing_percent > 0]
+        
+        if not missing_percent.empty:
+            # Get top 8 columns with missing values (reduced from 15)
+            missing_percent = missing_percent.head(8)
+            
+            # Convert to Python native types
+            x_values = missing_percent.values.tolist()
+            y_values = missing_percent.index.tolist()
+            
+            # Create horizontal bar chart with simpler style
+            fig = go.Figure()
+            
+            # Add bars
+            fig.add_trace(go.Bar(
+                y=y_values,
+                x=x_values,
+                orientation='h',
+                text=[f"{v:.1f}%" for v in x_values],
+                textposition='auto',
+                marker_color=COLORS['primary'],
+                hovertemplate='%{y}: %{x:.1f}%<extra></extra>'
+            ))
+            
+            base_layout = get_base_layout('Missing Values', height=350, width=550)
+            base_layout.update(
+                xaxis_title='Missing (%)',
+                yaxis_title=None,
+                margin=dict(l=120, r=30, t=50, b=30),
+                showlegend=False
+            )
+            fig.update_layout(**base_layout)
+            
+            try:
+                fig_json = json.dumps(fig.to_dict())
+                visualizations.append({
+                    'title': 'Missing Values',
+                    'type': 'missing_values',
+                    'size': size_config,
+                    'plotly_figure': fig_json
+                })
+            except (TypeError, ValueError) as e:
+                visualizations.append({
+                    'title': 'Missing Values',
+                    'type': 'missing_values',
+                    'size': size_config,
+                    'error': f"Could not serialize plot: {str(e)}"
+                })
+    except Exception as e:
         visualizations.append({
-            'title': f'Relationship between {col1} and {col2}',
-            'type': 'scatter',
-            'plotly_figure': fig.to_json()
+            'title': 'Missing Values',
+            'type': 'missing_values',
+            'size': size_config,
+            'error': f"Error analyzing missing values: {str(e)}"
         })
-
     
     return visualizations
-
-
-
-
-
 def perform_clustering(df):
     """Clustering analysis with Plotly"""
     numeric_df = df.select_dtypes(include=[np.number])
